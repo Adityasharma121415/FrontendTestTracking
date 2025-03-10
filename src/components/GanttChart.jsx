@@ -8,21 +8,27 @@ const GanttChart = ({ data }) => {
   const [hoveredTask, setHoveredTask] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   
-  // Define funnel colors - these will be used as the main color for task bars
+  // Define funnel colors with the specific scheme requested
   const funnelColors = {
-    SOURCING: '#4bc0c0', // Teal
-    CREDIT: '#ff6384',   // Pink
-    // Add more colors for other funnels if needed
+    SOURCING: '#3498db',    // Blue
+    CREDIT: '#8e44ad',      // Purple
+    CONVERSION: '#8B4513',  // Brown
+    FULFILLMENT: '#20b2aa', // Teal
+    DISBURSAL: '#556B2F',   // Olive green
+    RISK: '#2c3e50',        // Dark almost black
+    RTO: '#FF69B4',         // Pink
+    OTHERS: '#95a5a6',      // Grey
   };
   
-  // Define status colors - these will be used for status indicators
+  // Define status colors with the specific scheme requested
   const statusColors = {
-    COMPLETED: '#10B981', // Green
-    PENDING: '#F59E0B',   // Amber
-    FAILED: '#EF4444',    // Red
-    INITIATED: '#3B82F6', // Blue
-    IN_PROGRESS: '#8B5CF6', // Purple
-    // Add more status colors as needed
+    NEW: '#FFCC00',         // Yellow
+    'TO DO': '#ef4444',     // Red
+    IN_PROGRESS: '#f97316', // Orange
+    COMPLETED: '#16a34a',   // Green
+    PENDING: '#f59e0b',     // Amber
+    FAILED: '#ef4444',      // Red
+    INITIATED: '#3B82F6',   // Blue
   };
   
   useEffect(() => {
@@ -38,8 +44,11 @@ const GanttChart = ({ data }) => {
   const processDataForChart = (funnelGroups) => {
     let allTasks = [];
     const uniqueFunnels = [];
-    let minTime = null; // Start with null
-    let maxTime = null; // Start with null
+    let minTime = null;
+    let maxTime = null;
+    
+    // Create a global taskMap to ensure unique task IDs across all funnels
+    const taskMap = {};
     
     funnelGroups.forEach((group) => {
       const funnelName = group.funnelName;
@@ -48,69 +57,79 @@ const GanttChart = ({ data }) => {
         uniqueFunnels.push(funnelName);
       }
       
-      // Group tasks by taskId to find start and end times
-      const taskMap = {};
-      
       group.tasks.forEach(task => {
-        // Use createdAt for the first status if available, otherwise use updatedAt
         const taskTime = new Date(task.createdAt || task.updatedAt);
         
-        // Initialize min/max time with the first task time we encounter
         if (minTime === null || maxTime === null) {
           minTime = taskTime;
           maxTime = taskTime;
         } else {
-          // Update min and max time for the time range
           if (taskTime < minTime) minTime = taskTime;
           if (taskTime > maxTime) maxTime = taskTime;
         }
         
-        if (!taskMap[task.taskId]) {
-          taskMap[task.taskId] = {
+        // Use a composite key that includes both taskId and funnel
+        // This ensures tasks with the same ID but different funnels are treated separately
+        const taskKey = `${task.funnel}:${task.taskId}`;
+        
+        if (!taskMap[taskKey]) {
+          // Initialize the task with segments array
+          taskMap[taskKey] = {
             id: task.taskId,
             funnel: task.funnel,
-            startTime: taskTime, // Use the earliest time as start time
-            endTime: taskTime,
+            segments: [{
+              startTime: taskTime,
+              endTime: taskTime,
+              status: task.status
+            }],
             statuses: [{ 
               status: task.status, 
               time: taskTime,
-              color: statusColors[task.status] || '#6B7280' // Default gray
+              color: statusColors[task.status] || '#6B7280'
             }],
             actorId: task.actorId,
-            funnelColor: funnelColors[task.funnel] || '#' + Math.floor(Math.random()*16777215).toString(16)
+            funnelColor: funnelColors[task.funnel] || '#95a5a6' // Default to grey
           };
         } else {
           // Add status change
-          taskMap[task.taskId].statuses.push({ 
+          taskMap[taskKey].statuses.push({ 
             status: task.status, 
             time: taskTime,
-            color: statusColors[task.status] || '#6B7280' // Default gray
+            color: statusColors[task.status] || '#6B7280'
           });
           
-          // Update start time if this is an earlier status
-          if (taskTime < taskMap[task.taskId].startTime) {
-            taskMap[task.taskId].startTime = taskTime;
-          }
+          // Check if this is a new segment or continuation of existing segment
+          const lastSegment = taskMap[taskKey].segments[taskMap[taskKey].segments.length - 1];
+          const timeDiff = taskTime - lastSegment.endTime;
           
-          // Update end time if this is a later status
-          if (taskTime > taskMap[task.taskId].endTime) {
-            taskMap[task.taskId].endTime = taskTime;
+          // If the time difference is significant, create a new segment
+          if (timeDiff > 5 * 60 * 1000) { // 5 minutes threshold
+            taskMap[taskKey].segments.push({
+              startTime: taskTime,
+              endTime: taskTime,
+              status: task.status
+            });
+          } else {
+            // Update the end time of the last segment
+            lastSegment.endTime = taskTime;
+            lastSegment.status = task.status;
           }
         }
       });
-      
-      // Sort statuses by time and set final status for each task
-      Object.values(taskMap).forEach(task => {
-        task.statuses.sort((a, b) => a.time - b.time);
-        // Get the final status
-        task.finalStatus = task.statuses[task.statuses.length - 1];
-      });
-      
-      // Convert to array and add to all tasks
-      allTasks = [...allTasks, ...Object.values(taskMap)];
     });
     
-    // Only add a very small buffer (1%) to ensure tasks at the edges are visible
+    // Sort statuses and set final status for each task
+    Object.values(taskMap).forEach(task => {
+      task.statuses.sort((a, b) => a.time - b.time);
+      task.finalStatus = task.statuses[task.statuses.length - 1];
+      
+      // Sort segments by start time to ensure proper ordering
+      task.segments.sort((a, b) => a.startTime - b.startTime);
+    });
+    
+    allTasks = Object.values(taskMap);
+    
+    // Add buffer to time range
     if (minTime && maxTime) {
       const timeRange = maxTime - minTime;
       const smallBuffer = timeRange * 0.01;
@@ -124,73 +143,46 @@ const GanttChart = ({ data }) => {
     };
   };
   
-  const getTaskPosition = (task) => {
+  const getSegmentPosition = (segment, timeRange) => {
     if (!timeRange.start || !timeRange.end) return { left: 0, width: 0 };
     
     const totalDuration = timeRange.end - timeRange.start;
-    const taskStart = task.startTime - timeRange.start;
-    const taskDuration = task.endTime - task.startTime;
+    const segmentStart = segment.startTime - timeRange.start;
+    const segmentDuration = segment.endTime - segment.startTime;
     
-    const left = (taskStart / totalDuration) * 100;
-    const width = (taskDuration / totalDuration) * 100;
+    const left = (segmentStart / totalDuration) * 100;
+    const width = (segmentDuration / totalDuration) * 100;
     
     return { left: `${left}%`, width: `${Math.max(width, 0.5)}%` };
   };
   
-  const getStatusPosition = (status, task) => {
-    if (!timeRange.start || !timeRange.end) return { left: 0 };
+  const getConnectionPosition = (startSegment, endSegment, timeRange) => {
+    if (!timeRange.start || !timeRange.end) return { left: 0, width: 0 };
     
     const totalDuration = timeRange.end - timeRange.start;
-    const statusTime = status.time - timeRange.start;
     
-    const left = (statusTime / totalDuration) * 100;
+    const startPos = (endSegment.startTime - timeRange.start) / totalDuration * 100;
+    const endPos = (startSegment.endTime - timeRange.start) / totalDuration * 100;
     
-    return { left: `${left}%` };
+    return { 
+      left: `${endPos}%`, 
+      width: `${startPos - endPos}%` 
+    };
   };
   
-  const handleTaskMouseEnter = (e, task) => {
-    setHoveredTask(task);
+  const handleTaskMouseEnter = (e, task, segment) => {
+    setHoveredTask({...task, currentSegment: segment});
     setTooltipPosition({ 
       x: e.clientX, 
       y: e.clientY 
     });
   };
   
-  const renderTimeAxis = () => {
-    if (!timeRange.start || !timeRange.end) return null;
-    
-    const totalDuration = timeRange.end - timeRange.start;
-    // Determine appropriate number of ticks based on duration
-    const numTicks = 10;
-    const ticks = [];
-    
-    for (let i = 0; i <= numTicks; i++) {
-      const tickTime = new Date(timeRange.start.getTime() + (totalDuration * (i / numTicks)));
-      ticks.push(
-        <div 
-          key={i} 
-          className="absolute top-0 h-full border-l border-gray-300"
-          style={{ left: `${(i / numTicks) * 100}%` }}
-        >
-          <div className="text-xs text-gray-500 mt-1 -ml-8 w-16 text-center">
-            {format(tickTime, 'HH:mm:ss')}
-          </div>
-        </div>
-      );
-    }
-    
-    return (
-      <div className="relative h-8 mb-4 border-b border-gray-300">
-        {ticks}
-      </div>
-    );
-  };
-  
   const renderTaskTooltip = () => {
     if (!hoveredTask) return null;
     
-    // Calculate positions for the status timeline
-    const totalDuration = hoveredTask.endTime - hoveredTask.startTime;
+    const segment = hoveredTask.currentSegment;
+    if (!segment) return null;
     
     return (
       <div 
@@ -220,17 +212,17 @@ const GanttChart = ({ data }) => {
               <span className="ml-1 inline-flex items-center">
                 <span 
                   className="inline-block w-3 h-3 rounded-full mr-1"
-                  style={{ backgroundColor: hoveredTask.finalStatus.color }}
+                  style={{ backgroundColor: statusColors[segment.status] || '#6B7280' }}
                 ></span>
-                {hoveredTask.finalStatus.status}
+                {segment.status}
               </span>
             </p>
             <p><span className="font-semibold">Actor ID:</span> {hoveredTask.actorId || 'None'}</p>
           </div>
           <div>
-            <p><span className="font-semibold">Start:</span> {format(hoveredTask.startTime, 'HH:mm:ss')}</p>
-            <p><span className="font-semibold">End:</span> {format(hoveredTask.endTime, 'HH:mm:ss')}</p>
-            <p><span className="font-semibold">Duration:</span> {((hoveredTask.endTime - hoveredTask.startTime) / 1000).toFixed(2)}s</p>
+            <p><span className="font-semibold">Start:</span> {format(segment.startTime, 'HH:mm:ss')}</p>
+            <p><span className="font-semibold">End:</span> {format(segment.endTime, 'HH:mm:ss')}</p>
+            <p><span className="font-semibold">Duration:</span> {((segment.endTime - segment.startTime) / 1000).toFixed(2)}s</p>
           </div>
         </div>
         
@@ -244,7 +236,8 @@ const GanttChart = ({ data }) => {
             
             {/* Status nodes and connections */}
             {hoveredTask.statuses.map((status, idx) => {
-              const position = ((status.time - hoveredTask.startTime) / totalDuration) * 100;
+              const position = ((status.time - hoveredTask.statuses[0].time) / 
+                (hoveredTask.statuses[hoveredTask.statuses.length - 1].time - hoveredTask.statuses[0].time)) * 100;
               const nextStatus = hoveredTask.statuses[idx + 1];
               
               return (
@@ -289,7 +282,8 @@ const GanttChart = ({ data }) => {
                       style={{ 
                         left: `${position}%`, 
                         top: '10px',
-                        width: `${((nextStatus.time - status.time) / totalDuration) * 100}%`
+                        width: `${((nextStatus.time - status.time) / 
+                          (hoveredTask.statuses[hoveredTask.statuses.length - 1].time - hoveredTask.statuses[0].time)) * 100}%`
                       }}
                     ></div>
                   )}
@@ -344,7 +338,7 @@ const GanttChart = ({ data }) => {
             <div key={idx} className="flex items-center bg-gray-100 px-3 py-1 rounded-full">
               <div 
                 className="w-4 h-4 rounded-full mr-2" 
-                style={{ backgroundColor: funnelColors[funnel] || '#ccc' }}
+                style={{ backgroundColor: funnelColors[funnel] || '#95a5a6' }}
               ></div>
               <span className="font-medium">{funnel}</span>
             </div>
@@ -352,56 +346,157 @@ const GanttChart = ({ data }) => {
         </div>
       </div>
       
-      <div className="relative overflow-x-auto border rounded-lg p-4 bg-gray-50">
-        {renderTimeAxis()}
-        
-        {funnels.map((funnel, funnelIdx) => (
-          <div key={funnelIdx} className="mb-8">
-            <h3 className="text-md font-semibold mb-3 flex items-center">
-              <div 
-                className="w-3 h-3 rounded-full mr-2" 
-                style={{ backgroundColor: funnelColors[funnel] || '#ccc' }}
-              ></div>
-              {funnel}
-            </h3>
-            
-            <div className="relative">
-              {(tasksByFunnel[funnel] || []).map((task, idx) => {
-                const { left, width } = getTaskPosition(task);
-                
-                return (
+      {/* Main chart container with grid structure */}
+      <div className="flex" style={{ borderTop: '1px solid #e5e7eb' }}>
+        {/* Left sidebar for task names */}
+        <div className="w-48 flex-shrink-0 border-r border-gray-200">
+          {funnels.map((funnel, funnelIdx) => {
+            const funnelTasks = tasksByFunnel[funnel] || [];
+            return (
+              <div key={funnelIdx}>
+                {/* Funnel header */}
+                <div className="py-2 px-3 font-medium bg-gray-50 border-b border-gray-200 flex items-center">
                   <div 
-                    key={idx} 
-                    className="relative h-10 mb-3 flex items-center group"
-                  >
-                    <div className="w-40 pr-4 font-medium truncate text-gray-700">{task.id}</div>
-                    <div className="flex-1 relative h-full">
-                      {/* Task bar with funnel color */}
-                      <div 
-                        className="absolute h-6 rounded-md cursor-pointer transition-all duration-200 group-hover:h-8 group-hover:-translate-y-1"
-                        style={{ 
-                          left, 
-                          width, 
-                          backgroundColor: task.funnelColor,
-                        }}
-                        onMouseEnter={(e) => handleTaskMouseEnter(e, task)}
-                        onMouseLeave={() => setHoveredTask(null)}
-                      >
-                        {/* Status indicator dot at the end of the bar */}
-                        <div 
-                          className="absolute right-0 top-0 bottom-0 w-3 rounded-r-md"
-                          style={{ backgroundColor: task.finalStatus.color }}
-                        ></div>
-                      </div>
+                    className="w-3 h-3 rounded-full mr-2" 
+                    style={{ backgroundColor: funnelColors[funnel] || '#95a5a6' }}
+                  ></div>
+                  <span>{funnel}</span>
+                </div>
+                
+                {/* Task names */}
+                {funnelTasks.map((task, idx) => (
+                  <div key={idx} className="border-b border-gray-100">
+                    <div className="h-10 flex items-center px-3">
+                      <span className="text-sm truncate">{task.id}</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+                ))}
+                
+                {/* Only add separator if not the last funnel */}
+                {funnelIdx < funnels.length - 1 && (
+                  <div className="h-px bg-black w-full"></div>
+                )}
+              </div>
+            );
+          })}
+        </div>
         
-        {renderTaskTooltip()}
+        {/* Main timeline graph */}
+        <div className="flex-1 overflow-x-auto">
+          {/* Time axis header */}
+          <div className="border-b border-gray-200 py-2 relative h-10 bg-gray-50">
+            {timeRange.start && timeRange.end && Array.from({ length: 11 }).map((_, i) => {
+              const position = `${(i / 10) * 100}%`;
+              const tickTime = new Date(timeRange.start.getTime() + ((timeRange.end - timeRange.start) * (i / 10)));
+              
+              return (
+                <div 
+                  key={i} 
+                  className="absolute top-0 h-full flex items-center justify-center"
+                  style={{ left: position, width: '10%' }}
+                >
+                  <div className="text-xs text-gray-500">
+                    {format(tickTime, 'HH:mm:ss')}
+                  </div>
+                  {/* Vertical grid line */}
+                  {i > 0 && (
+                    <div 
+                      className="absolute top-0 bottom-0 left-0 w-px bg-gray-300"
+                      style={{ height: '100vh' }} // Make grid lines extend down
+                    ></div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Funnel timelines */}
+          <div className="relative">
+            {funnels.map((funnel, funnelIdx) => {
+              const funnelTasks = tasksByFunnel[funnel] || [];
+              const funnelColor = funnelColors[funnel] || '#95a5a6';
+              
+              return (
+                <div key={funnelIdx}>
+                  {/* Empty funnel header to match sidebar */}
+                  <div className="h-10 border-b border-gray-200"></div>
+                  
+                  {/* Task rows */}
+                  {funnelTasks.map((task, idx) => (
+                    <div key={idx} className="relative border-b border-gray-100">
+                      <div className="h-10 relative">
+                        {/* Task segments - CENTERED in the row instead of being offset */}
+                        {task.segments.map((segment, segmentIdx) => {
+                          const position = getSegmentPosition(segment, timeRange);
+                          const statusColor = statusColors[segment.status] || '#6B7280';
+                          
+                          return (
+                            <div 
+                              key={segmentIdx}
+                              className="absolute cursor-pointer"
+                              style={{ 
+                                left: position.left, 
+                                width: position.width,
+                                zIndex: 10,
+                                top: '50%', // Changed from 30% to 50% to center in the row
+                                transform: 'translateY(-50%)'
+                              }}
+                              onMouseEnter={(e) => handleTaskMouseEnter(e, task, segment)}
+                              onMouseLeave={() => setHoveredTask(null)}
+                            >
+                              {/* Line */}
+                              <div 
+                                className="h-2 rounded"
+                                style={{ backgroundColor: funnelColor }}
+                              ></div>
+                              
+                              {/* Status dot */}
+                              <div 
+                                className="absolute right-0 w-3 h-3 rounded-full border-2 border-white shadow-sm transform translate-x-1.5 top-1/2 -translate-y-1/2"
+                                style={{ backgroundColor: statusColor }}
+                              ></div>
+                            </div>
+                          );
+                        })}
+                        
+                        {/* Dotted connecting lines - ALSO CENTERED */}
+                        {task.segments.length > 1 && task.segments.map((segment, segmentIdx) => {
+                          if (segmentIdx === task.segments.length - 1) return null;
+                          
+                          const nextSegment = task.segments[segmentIdx + 1];
+                          const position = getConnectionPosition(segment, nextSegment, timeRange);
+                          
+                          return (
+                            <div 
+                              key={`connection-${segmentIdx}`}
+                              className="absolute z-5"
+                              style={{ 
+                                left: position.left, 
+                                width: position.width,
+                                top: '50%', // Changed from 30% to 50% to center in the row
+                                transform: 'translateY(-50%)',
+                                borderTop: `2px dotted ${funnelColor}`,
+                                height: 0
+                              }}
+                            ></div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Black separator line after each funnel */}
+                  {funnelIdx < funnels.length - 1 && (
+                    <div className="h-px bg-black w-full"></div>
+                  )}
+                </div>
+              );
+            })}
+            
+            {/* Tooltip */}
+            {renderTaskTooltip()}
+          </div>
+        </div>
       </div>
       
       <div className="mt-8">
@@ -410,6 +505,7 @@ const GanttChart = ({ data }) => {
           {funnels.map((funnel, index) => {
             const funnelTasks = tasks.filter(t => t.funnel === funnel);
             const statuses = [...new Set(funnelTasks.flatMap(t => t.statuses.map(s => s.status)))];
+            const funnelColor = funnelColors[funnel] || '#95a5a6';
             
             // Calculate completion percentage
             const completedTasks = funnelTasks.filter(t => 
@@ -424,7 +520,7 @@ const GanttChart = ({ data }) => {
                 <h3 className="font-semibold text-lg flex items-center">
                   <div 
                     className="w-3 h-3 rounded-full mr-2" 
-                    style={{ backgroundColor: funnelColors[funnel] || '#ccc' }}
+                    style={{ backgroundColor: funnelColor }}
                   ></div>
                   {funnel}
                 </h3>
@@ -437,7 +533,7 @@ const GanttChart = ({ data }) => {
                       className="h-2.5 rounded-full" 
                       style={{ 
                         width: `${completionPercentage}%`,
-                        backgroundColor: statusColors['COMPLETED'] || '#10B981'
+                        backgroundColor: statusColors['COMPLETED'] || '#16a34a'
                       }}
                     ></div>
                   </div>
