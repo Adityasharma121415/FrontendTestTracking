@@ -382,7 +382,24 @@ const GanttChart = ({ data }) => {
         </div>
         
         {/* Main timeline graph */}
-        <div className="flex-1 overflow-x-auto">
+        <div className="flex-1 overflow-x-auto relative">
+          {/* Vertical grid lines that span the entire chart */}
+          {timeRange.start && timeRange.end && Array.from({ length: 11 }).map((_, i) => {
+            const position = `${(i / 10) * 100}%`;
+            
+            return (
+              <div 
+                key={`grid-line-${i}`}
+                className="absolute top-0 bottom-0 border-l border-gray-300"
+                style={{ 
+                  left: position,
+                  height: '100%',
+                  zIndex: 1 // Lower z-index so task elements appear above
+                }}
+              ></div>
+            );
+          })}
+          
           {/* Time axis header */}
           <div className="border-b border-gray-200 py-2 relative h-10 bg-gray-50">
             {timeRange.start && timeRange.end && Array.from({ length: 11 }).map((_, i) => {
@@ -398,13 +415,6 @@ const GanttChart = ({ data }) => {
                   <div className="text-xs text-gray-500">
                     {format(tickTime, 'HH:mm:ss')}
                   </div>
-                  {/* Vertical grid line */}
-                  {i > 0 && (
-                    <div 
-                      className="absolute top-0 bottom-0 left-0 w-px bg-gray-300"
-                      style={{ height: '100vh' }} // Make grid lines extend down
-                    ></div>
-                  )}
                 </div>
               );
             })}
@@ -425,7 +435,7 @@ const GanttChart = ({ data }) => {
                   {funnelTasks.map((task, idx) => (
                     <div key={idx} className="relative border-b border-gray-100">
                       <div className="h-10 relative">
-                        {/* Task segments - CENTERED in the row instead of being offset */}
+                        {/* Task segments - MOVED UP by adjusting top position */}
                         {task.segments.map((segment, segmentIdx) => {
                           const position = getSegmentPosition(segment, timeRange);
                           const statusColor = statusColors[segment.status] || '#6B7280';
@@ -438,8 +448,8 @@ const GanttChart = ({ data }) => {
                                 left: position.left, 
                                 width: position.width,
                                 zIndex: 10,
-                                top: '50%', // Changed from 30% to 50% to center in the row
-                                transform: 'translateY(-50%)'
+                                top: '30%', // Moved up from 50% to 30%
+                                transform: 'translateY(-50%)' // Keep the vertical centering
                               }}
                               onMouseEnter={(e) => handleTaskMouseEnter(e, task, segment)}
                               onMouseLeave={() => setHoveredTask(null)}
@@ -459,7 +469,7 @@ const GanttChart = ({ data }) => {
                           );
                         })}
                         
-                        {/* Dotted connecting lines - ALSO CENTERED */}
+                        {/* Dotted connecting lines - ALSO MOVED UP */}
                         {task.segments.length > 1 && task.segments.map((segment, segmentIdx) => {
                           if (segmentIdx === task.segments.length - 1) return null;
                           
@@ -473,8 +483,8 @@ const GanttChart = ({ data }) => {
                               style={{ 
                                 left: position.left, 
                                 width: position.width,
-                                top: '50%', // Changed from 30% to 50% to center in the row
-                                transform: 'translateY(-50%)',
+                                top: '30%', // Moved up from 50% to 30%
+                                transform: 'translateY(-50%)', // Keep the vertical centering
                                 borderTop: `2px dotted ${funnelColor}`,
                                 height: 0
                               }}
