@@ -374,7 +374,7 @@ const GanttChart = ({ data }) => {
                 
                 {/* Only add separator if not the last funnel */}
                 {funnelIdx < funnels.length - 1 && (
-                  <div className="h-px bg-black w-full"></div>
+                  <div className="h-px bg-black w-full" id={`funnel-separator-${funnelIdx}`}></div>
                 )}
               </div>
             );
@@ -427,15 +427,19 @@ const GanttChart = ({ data }) => {
               const funnelColor = funnelColors[funnel] || '#95a5a6';
               
               return (
-                <div key={funnelIdx}>
+                <div key={funnelIdx} className="relative">
                   {/* Empty funnel header to match sidebar */}
                   <div className="h-10 border-b border-gray-200"></div>
                   
-                  {/* Task rows */}
+                  {/* Task rows with JavaScript-based positioning */}
                   {funnelTasks.map((task, idx) => (
-                    <div key={idx} className="relative border-b border-gray-100">
+                    <div 
+                      key={idx} 
+                      className="relative border-b border-gray-100"
+                      id={`task-row-${funnel}-${idx}`}
+                    >
                       <div className="h-10 relative">
-                        {/* Task segments - MOVED UP by adjusting top position */}
+                        {/* Task segments - Using JavaScript for perfect alignment */}
                         {task.segments.map((segment, segmentIdx) => {
                           const position = getSegmentPosition(segment, timeRange);
                           const statusColor = statusColors[segment.status] || '#6B7280';
@@ -443,14 +447,14 @@ const GanttChart = ({ data }) => {
                           return (
                             <div 
                               key={segmentIdx}
-                              className="absolute cursor-pointer"
+                              className="absolute cursor-pointer task-segment"
                               style={{ 
                                 left: position.left, 
                                 width: position.width,
                                 zIndex: 10,
-                                top: '30%', // Moved up from 50% to 30%
-                                transform: 'translateY(-50%)' // Keep the vertical centering
+                                top: '-20px', // Moved even higher
                               }}
+                              data-task-id={`${funnel}-${task.id}-${segmentIdx}`}
                               onMouseEnter={(e) => handleTaskMouseEnter(e, task, segment)}
                               onMouseLeave={() => setHoveredTask(null)}
                             >
@@ -479,15 +483,15 @@ const GanttChart = ({ data }) => {
                           return (
                             <div 
                               key={`connection-${segmentIdx}`}
-                              className="absolute z-5"
+                              className="absolute z-5 task-connection"
                               style={{ 
                                 left: position.left, 
                                 width: position.width,
-                                top: '30%', // Moved up from 50% to 30%
-                                transform: 'translateY(-50%)', // Keep the vertical centering
+                                top: '-20px', // Moved even higher
                                 borderTop: `2px dotted ${funnelColor}`,
                                 height: 0
                               }}
+                              data-task-id={`${funnel}-${task.id}-connection-${segmentIdx}`}
                             ></div>
                           );
                         })}
@@ -495,9 +499,15 @@ const GanttChart = ({ data }) => {
                     </div>
                   ))}
                   
-                  {/* Black separator line after each funnel */}
+                  {/* Black separator line after each funnel - now positioned absolutely to match sidebar */}
                   {funnelIdx < funnels.length - 1 && (
-                    <div className="h-px bg-black w-full"></div>
+                    <div 
+                      className="absolute left-0 right-0 h-px bg-black w-full z-20"
+                      style={{ 
+                        bottom: 0, // Position at the bottom of the current funnel section
+                      }}
+                      id={`funnel-chart-separator-${funnelIdx}`}
+                    ></div>
                   )}
                 </div>
               );
@@ -575,6 +585,73 @@ const GanttChart = ({ data }) => {
           })}
         </div>
       </div>
+      
+      {/* Add JavaScript to ensure perfect alignment of funnel separators and task lines */}
+      <script dangerouslySetInnerHTML={{
+        __html: `
+          // This script runs after component mount to ensure perfect alignment
+          document.addEventListener('DOMContentLoaded', function() {
+            const funnels = ${JSON.stringify(funnels)};
+            
+            // For each funnel (except the last one), align the separators
+            for (let i = 0; i < funnels.length - 1; i++) {
+              const sidebarSeparator = document.getElementById('funnel-separator-' + i);
+              const chartSeparator = document.getElementById('funnel-chart-separator-' + i);
+              
+              if (sidebarSeparator && chartSeparator) {
+                // Get the position of the sidebar separator
+                const sidebarRect = sidebarSeparator.getBoundingClientRect();
+                
+                // Position the chart separator at the exact same height
+                chartSeparator.style.top = sidebarRect.top + 'px';
+                chartSeparator.style.bottom = 'auto';
+              }
+            }
+            
+            // Align task segments with their corresponding task names
+            // This ensures perfect vertical alignment
+            const taskSegments = document.querySelectorAll('.task-segment');
+            const taskConnections = document.querySelectorAll('.task-connection');
+            
+            // Function to position task segments at the center of their task name
+            function positionTaskElements() {
+              // For each funnel
+              funnels.forEach((funnel, funnelIdx) => {
+                // For each task in the funnel
+                const taskRows = document.querySelectorAll('[id^="task-row-' + funnel + '"]');
+                
+                taskRows.forEach((taskRow, taskIdx) => {
+                  // Get the task row's position
+                  const taskRect = taskRow.getBoundingClientRect();
+                  const taskCenter = taskRect.top + (taskRect.height / 2);
+                  
+                  // Find all segments for this task and position them
+                  const segments = document.querySelectorAll('[data-task-id^="' + funnel + '-"][data-task-id$="-' + taskIdx + '"]');
+                  segments.forEach(segment => {
+                    // Position at the center of the task name
+                    segment.style.top = (taskCenter - 5) + 'px'; // 5px offset for the line height
+                    segment.style.transform = 'translateY(-50%)';
+                  });
+                  
+                  // Find all connections for this task and position them
+                  const connections = document.querySelectorAll('[data-task-id^="' + funnel + '-"][data-task-id*="-connection-"]');
+                  connections.forEach(connection => {
+                    // Position at the center of the task name
+                    connection.style.top = (taskCenter - 5) + 'px'; // 5px offset for the line height
+                    connection.style.transform = 'translateY(-50%)';
+                  });
+                });
+              });
+            }
+            
+            // Run the positioning function
+            setTimeout(positionTaskElements, 100); // Small delay to ensure DOM is ready
+            
+            // Also run on window resize
+            window.addEventListener('resize', positionTaskElements);
+          });
+        `
+      }} />
     </div>
   );
 };
