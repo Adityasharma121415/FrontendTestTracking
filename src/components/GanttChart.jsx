@@ -372,10 +372,7 @@ const GanttChart = ({ data }) => {
                   </div>
                 ))}
                 
-                {/* Only add separator if not the last funnel */}
-                {funnelIdx < funnels.length - 1 && (
-                  <div className="h-px bg-black w-full" id={`funnel-separator-${funnelIdx}`}></div>
-                )}
+                {/* Removed black separator lines */}
               </div>
             );
           })}
@@ -499,16 +496,7 @@ const GanttChart = ({ data }) => {
                     </div>
                   ))}
                   
-                  {/* Black separator line after each funnel - now positioned absolutely to match sidebar */}
-                  {funnelIdx < funnels.length - 1 && (
-                    <div 
-                      className="absolute left-0 right-0 h-px bg-black w-full z-20"
-                      style={{ 
-                        bottom: 0, // Position at the bottom of the current funnel section
-                      }}
-                      id={`funnel-chart-separator-${funnelIdx}`}
-                    ></div>
-                  )}
+                  {/* Removed black separator lines */}
                 </div>
               );
             })}
@@ -586,37 +574,21 @@ const GanttChart = ({ data }) => {
         </div>
       </div>
       
-      {/* Add JavaScript to ensure perfect alignment of funnel separators and task lines */}
+      {/* JavaScript for task line alignment - removed separator alignment code */}
       <script dangerouslySetInnerHTML={{
         __html: `
           // This script runs after component mount to ensure perfect alignment
           document.addEventListener('DOMContentLoaded', function() {
-            const funnels = ${JSON.stringify(funnels)};
-            
-            // For each funnel (except the last one), align the separators
-            for (let i = 0; i < funnels.length - 1; i++) {
-              const sidebarSeparator = document.getElementById('funnel-separator-' + i);
-              const chartSeparator = document.getElementById('funnel-chart-separator-' + i);
-              
-              if (sidebarSeparator && chartSeparator) {
-                // Get the position of the sidebar separator
-                const sidebarRect = sidebarSeparator.getBoundingClientRect();
-                
-                // Position the chart separator at the exact same height
-                chartSeparator.style.top = sidebarRect.top + 'px';
-                chartSeparator.style.bottom = 'auto';
-              }
-            }
-            
             // Align task segments with their corresponding task names
             // This ensures perfect vertical alignment
             const taskSegments = document.querySelectorAll('.task-segment');
             const taskConnections = document.querySelectorAll('.task-connection');
             
-            // Function to position task segments at the center of their task name
+            // Function to position task elements at the center of their task name
             function positionTaskElements() {
               // For each funnel
-              funnels.forEach((funnel, funnelIdx) => {
+              const funnels = ${JSON.stringify(funnels)};
+              funnels.forEach((funnel) => {
                 // For each task in the funnel
                 const taskRows = document.querySelectorAll('[id^="task-row-' + funnel + '"]');
                 
