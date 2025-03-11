@@ -184,14 +184,20 @@ const GanttChart = ({ data }) => {
     const segment = hoveredTask.currentSegment;
     if (!segment) return null;
     
+    // Format the statuses for a cleaner timeline display
+    const formattedStatuses = hoveredTask.statuses.map((status, index) => ({
+      ...status,
+      formattedTime: format(status.time, 'HH:mm:ss')
+    }));
+    
     return (
       <div 
         className="fixed z-50 bg-white p-4 rounded-lg shadow-xl border border-gray-200 text-sm"
         style={{ 
           left: `${tooltipPosition.x + 10}px`, 
           top: `${tooltipPosition.y + 10}px`,
-          maxWidth: '400px',
-          minWidth: '320px'
+          maxWidth: '500px', // Increased width
+          minWidth: '450px'  // Increased minimum width
         }}
       >
         <h4 className="font-bold text-lg mb-2">{hoveredTask.id}</h4>
@@ -226,53 +232,63 @@ const GanttChart = ({ data }) => {
           </div>
         </div>
         
+        {/* Improved Status Timeline */}
         <div className="mt-4">
           <p className="font-semibold mb-2">Status Timeline:</p>
           
-          {/* Visual status timeline */}
-          <div className="relative h-20 mb-2">
+          {/* Timeline container with improved layout */}
+          <div className="relative mt-2 mb-2 h-24"> {/* Increased height */}
             {/* Timeline line */}
-            <div className="absolute top-10 left-0 right-0 h-0.5 bg-gray-300"></div>
+            <div className="absolute left-0 right-0 h-0.5 bg-gray-300" style={{ top: '20px' }}></div>
             
             {/* Status nodes and connections */}
-            {hoveredTask.statuses.map((status, idx) => {
-              const position = ((status.time - hoveredTask.statuses[0].time) / 
-                (hoveredTask.statuses[hoveredTask.statuses.length - 1].time - hoveredTask.statuses[0].time)) * 100;
-              const nextStatus = hoveredTask.statuses[idx + 1];
+            {formattedStatuses.map((status, idx) => {
+              const position = ((status.time - formattedStatuses[0].time) / 
+                (formattedStatuses[formattedStatuses.length - 1].time - formattedStatuses[0].time)) * 100;
+              const nextStatus = formattedStatuses[idx + 1];
               
               return (
                 <React.Fragment key={idx}>
                   {/* Status node */}
                   <div 
-                    className="absolute w-4 h-4 rounded-full border-2 border-white shadow-md transform -translate-x-2 -translate-y-2 cursor-pointer"
+                    className="absolute"
                     style={{ 
-                      left: `${position}%`, 
-                      top: '10px',
-                      backgroundColor: status.color
+                      left: `${position}%`,
+                      top: '20px',
+                      transform: 'translate(-50%, -50%)'
                     }}
-                    title={`${status.status} at ${format(status.time, 'HH:mm:ss')}`}
-                  ></div>
+                  >
+                    <div 
+                      className="w-5 h-5 rounded-full border-2 border-white shadow-md"
+                      style={{ backgroundColor: status.color }}
+                      title={`${status.status} at ${status.formattedTime}`}
+                    ></div>
+                  </div>
                   
-                  {/* Status label */}
+                  {/* Status label - positioned ABOVE the timeline */}
                   <div 
-                    className="absolute text-xs font-medium transform -translate-x-1/2"
+                    className="absolute text-xs font-medium text-center"
                     style={{ 
-                      left: `${position}%`, 
-                      top: idx % 2 === 0 ? '20px' : '0px'
+                      left: `${position}%`,
+                      top: '0px',
+                      transform: 'translateX(-50%)',
+                      width: '80px' // Fixed width to prevent overlap
                     }}
                   >
                     {status.status}
                   </div>
                   
-                  {/* Time label */}
+                  {/* Time label - positioned BELOW the timeline */}
                   <div 
-                    className="absolute text-xs text-gray-500 transform -translate-x-1/2"
+                    className="absolute text-xs text-gray-500 text-center"
                     style={{ 
-                      left: `${position}%`, 
-                      top: idx % 2 === 0 ? '32px' : '-12px'
+                      left: `${position}%`,
+                      top: '35px', // Below the timeline
+                      transform: 'translateX(-50%)',
+                      width: '80px' // Fixed width to prevent overlap
                     }}
                   >
-                    {format(status.time, 'HH:mm:ss')}
+                    {status.formattedTime}
                   </div>
                   
                   {/* Connection line to next status */}
@@ -281,9 +297,9 @@ const GanttChart = ({ data }) => {
                       className="absolute h-0.5 bg-gray-400"
                       style={{ 
                         left: `${position}%`, 
-                        top: '10px',
+                        top: '20px',
                         width: `${((nextStatus.time - status.time) / 
-                          (hoveredTask.statuses[hoveredTask.statuses.length - 1].time - hoveredTask.statuses[0].time)) * 100}%`
+                          (formattedStatuses[formattedStatuses.length - 1].time - formattedStatuses[0].time)) * 100}%`
                       }}
                     ></div>
                   )}
@@ -354,13 +370,13 @@ const GanttChart = ({ data }) => {
             const funnelTasks = tasksByFunnel[funnel] || [];
             return (
               <div key={funnelIdx}>
-                {/* Funnel header */}
+                {/* Funnel header - darker gray text */}
                 <div className="py-2 px-3 font-medium bg-gray-50 border-b border-gray-200 flex items-center">
                   <div 
                     className="w-3 h-3 rounded-full mr-2" 
                     style={{ backgroundColor: funnelColors[funnel] || '#95a5a6' }}
                   ></div>
-                  <span>{funnel}</span>
+                  <span className="text-gray-700">{funnel}</span> {/* Darker gray text */}
                 </div>
                 
                 {/* Task names */}
@@ -371,8 +387,6 @@ const GanttChart = ({ data }) => {
                     </div>
                   </div>
                 ))}
-                
-                {/* Removed black separator lines */}
               </div>
             );
           })}
@@ -495,8 +509,6 @@ const GanttChart = ({ data }) => {
                       </div>
                     </div>
                   ))}
-                  
-                  {/* Removed black separator lines */}
                 </div>
               );
             })}
@@ -530,7 +542,7 @@ const GanttChart = ({ data }) => {
                     className="w-3 h-3 rounded-full mr-2" 
                     style={{ backgroundColor: funnelColor }}
                   ></div>
-                  {funnel}
+                  <span className="text-gray-700">{funnel}</span> {/* Darker gray text */}
                 </h3>
                 <p className="text-gray-600">Total Tasks: {funnelTasks.length}</p>
                 
@@ -574,7 +586,7 @@ const GanttChart = ({ data }) => {
         </div>
       </div>
       
-      {/* JavaScript for task line alignment - removed separator alignment code */}
+      {/* JavaScript for task line alignment */}
       <script dangerouslySetInnerHTML={{
         __html: `
           // This script runs after component mount to ensure perfect alignment
